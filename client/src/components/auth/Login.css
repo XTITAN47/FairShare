@@ -1,0 +1,35 @@
+.login-method-selector {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.login-method-selector div {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.login-method-selector label {
+  font-size: 0.9rem;
+  color: #495057;
+  cursor: pointer;
+}
+
+/* Ensure consistent styling for all input types */
+.form-group input[type="email"],
+.form-group input[type="tel"],
+.form-group input[type="password"] {
+  display: block;
+  width: 100%;
+  padding: 0.4rem;
+  font-size: 1.2rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.form-group input:focus {
+  border-color: #17a2b8;
+  outline: none;
+}
