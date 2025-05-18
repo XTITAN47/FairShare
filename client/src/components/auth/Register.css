@@ -16,3 +16,19 @@
   border-color: #17a2b8;
   outline: none;
 }
+
+.my-1 {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+.my-1 a {
+  color: #ffffff; /* White color for better visibility on dark background */
+  font-weight: 600;
+  text-decoration: underline;
+  font-size: 1.08rem;
+}
+.my-1 a:hover {
+  color: #ffffff; /* Keep white color on hover */
+  text-decoration: underline;
+}

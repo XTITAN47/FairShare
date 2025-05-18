@@ -383,12 +383,10 @@ const AddExpense = () => {
                         <option value="Travel">Travel</option>
                         <option value="Other">Other</option>
                     </select>
-                </div>
-
-                <div className="form-group">
+                </div>                <div className="form-group">
                     <label>Split Type</label>
                     <div className="split-type-options">
-                        <div>
+                        <div className="split-type-option">
                             <input
                                 type="radio"
                                 id="equal"
@@ -399,18 +397,7 @@ const AddExpense = () => {
                             />
                             <label htmlFor="equal">Equal</label>
                         </div>
-                        <div>
-                            <input
-                                type="radio"
-                                id="percentage"
-                                name="splitType"
-                                value="percentage"
-                                checked={splitType === 'percentage'}
-                                onChange={onChange}
-                            />
-                            <label htmlFor="percentage">Percentage</label>
-                        </div>
-                        <div>
+                        <div className="split-type-option">
                             <input
                                 type="radio"
                                 id="custom"
@@ -420,6 +407,17 @@ const AddExpense = () => {
                                 onChange={onChange}
                             />
                             <label htmlFor="custom">Custom</label>
+                        </div>
+                        <div className="split-type-option">
+                            <input
+                                type="radio"
+                                id="percentage"
+                                name="splitType"
+                                value="percentage"
+                                checked={splitType === 'percentage'}
+                                onChange={onChange}
+                            />
+                            <label htmlFor="percentage">Percentage</label>
                         </div>
                     </div>
                 </div>

@@ -5,11 +5,11 @@
   --light-teal: #1abc9c;
   --dark-teal: #0e6655;
   --teal-gradient: linear-gradient(135deg, #0e6655, #16a085);
-  
+
   --dark-green-1: rgba(22, 160, 133, 0.5);
   --dark-green-2: rgba(14, 102, 85, 0.7);
   --dark-green-3: rgba(10, 80, 70, 0.8);
-  
+
   --button-green: #1abc9c;
   --button-green-hover: #16a085;
   --highlight-yellow: #f1c40f;
@@ -17,17 +17,17 @@
   --danger-red-hover: #c0392b;
   --danger-orange: #e67e22;
   --danger-orange-hover: #d35400;
-  
+
   /* Money indication colors */
-  --money-owed: #e67e22;   /* Orange for money owed */
+  --money-owed: #e67e22; /* Orange for money owed */
   --money-receive: #2ecc71; /* Green for money to receive */
-  
+
   /* Dark blue colors for inner containers */
   --dark-blue-1: rgba(26, 37, 48, 0.85);
   --dark-blue-2: rgba(20, 30, 40, 0.9);
   --dark-blue-3: rgba(15, 25, 35, 0.95);
   --blue-gradient: linear-gradient(135deg, #1a2530, #2c3e50);
-  
+
   /* Dashboard colors */
   --dashboard-primary: #2c3e50;
   --dashboard-secondary: #3498db;
@@ -153,6 +153,32 @@ section.container {
 .form-group select option {
   background-color: var(--dark-blue-2);
   color: white;
+}
+
+/* Split type options styling */
+.split-type-options {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.split-type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.split-type-option input[type="radio"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.split-type-option label {
+  display: inline-block;
+  margin: 0;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 .custom-split-actions {

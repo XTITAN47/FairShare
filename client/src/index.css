@@ -31,7 +31,8 @@
 }
 
 body {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
   font-size: 1rem;
   line-height: 1.6;
   background-color: #1a2530;
@@ -329,17 +330,24 @@ button {
 }
 
 .navbar-landing {
-  background-color: rgba(15, 25, 35, 0.9); /* Semi-transparent dark background */
+  background-color: rgba(
+    15,
+    25,
+    35,
+    0.9
+  ); /* Semi-transparent dark background */
   backdrop-filter: blur(10px);
   border-bottom: none;
 }
 
 .navbar-container {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  padding: 0.7rem 2rem;
+  gap: 2rem; /* Adjust gap as needed */
   width: 100%;
+  margin: 0 auto;
+  padding: 0 2rem;
 }
 
 .navbar h1 {
@@ -370,8 +378,8 @@ button {
   width: 100%;
   height: 100%;
   background: linear-gradient(
-    135deg, 
-    rgba(22, 160, 133, 0), 
+    135deg,
+    rgba(22, 160, 133, 0),
     rgba(22, 160, 133, 0.1)
   );
   top: 0;
@@ -525,7 +533,8 @@ button {
   color: var(--danger-color);
 }
 
-.signup-btn, .login-btn {
+.signup-btn,
+.login-btn {
   background-color: rgba(22, 160, 133, 0.1);
   border-radius: var(--border-radius);
   font-weight: 500;
@@ -548,7 +557,8 @@ button {
   color: white !important;
 }
 
-.signup-btn:hover, .login-btn:hover {
+.signup-btn:hover,
+.login-btn:hover {
   background-color: rgba(22, 160, 133, 0.2);
   transform: translateY(-2px);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
@@ -712,8 +722,8 @@ button {
   .container {
     padding: 0 1rem;
   }
-  
-  .grid-cols-2, 
+
+  .grid-cols-2,
   .grid-cols-3 {
     grid-template-columns: 1fr;
   }
@@ -804,7 +814,7 @@ button {
 }
 
 .profile-link span {
-  font-family: 'Poppins', sans-serif;
+  font-family: "Poppins", sans-serif;
   font-weight: 500;
   color: #f8f9fa; /* Ensuring good contrast */
   letter-spacing: 0.03em;
@@ -842,7 +852,7 @@ button {
     height: 28px;
     font-size: 0.8rem;
   }
-  
+
   .profile-link {
     padding: 0.3rem 0.5rem !important;
   }

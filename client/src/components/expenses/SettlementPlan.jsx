@@ -453,10 +453,8 @@ const SettlementPlan = () => {
         <section className="container">
             <Link to={`/groups/${groupId}`} className="btn btn-light mb-3">
                 Back to Group
-            </Link>
-
-            <h1 style={{ color: '#444444' }}>Settlement Plan</h1>
-            <p style={{ color: '#444444' }}>Group: {group && group.name}</p>
+            </Link>            <h1 style={{ color: '#f5f7fa' }}>Settlement Plan</h1>
+            <p style={{ color: '#e6e9ee' }}>Group: {group && group.name}</p>
 
             {error && <div className="alert alert-danger">{error}</div>}
 
