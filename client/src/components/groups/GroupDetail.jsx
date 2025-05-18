@@ -4,6 +4,7 @@ import axios from 'axios';
 import AuthContext from '../../context/AuthContext';
 import QRCodeModal from '../layout/QRCodeModal';
 import './GroupDetail.css';
+import './GroupErrorStyles.css';
 
 const GroupDetail = () => {
     const { id } = useParams();
@@ -177,14 +178,18 @@ const GroupDetail = () => {
                 : { phone: newMemberPhone };
 
             const res = await axios.post(`/groups/${id}/invitations`, inviteData);
-            setGroup(res.data.group);
-
-            // Clear input fields
+            setGroup(res.data.group);            // Clear input fields
             setNewMemberEmail('');
             setNewMemberPhone('');
 
             // Show success message
             setError('');
+
+            // Scroll to top of page on success
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
 
             // Build appropriate success message
             const invitedContact = inviteMethod === 'email' ? newMemberEmail : newMemberPhone;
@@ -218,12 +223,27 @@ const GroupDetail = () => {
                 console.log('Invitation sent:', invitationData);
             }
         } catch (err) {
+            // Scroll to top of page on error
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+
             setError(err.response?.data?.message || 'Failed to invite member');
             console.error('Error inviting member:', err.response?.data || err);
-        }
-    };
 
-    const handleRemoveMember = async (userId) => {
+            // Clear error message after 7 seconds
+            setTimeout(() => {
+                setError('');
+            }, 7000);
+        }
+    }; const handleRemoveMember = async (userId) => {
+        // Scroll to top of page
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+
         try {
             if (window.confirm('Are you sure you want to remove this member?')) {
                 await axios.delete(`/groups/${id}/members/${userId}`);
@@ -239,16 +259,66 @@ const GroupDetail = () => {
                         userId: userId
                     });
                 }
+                // Show success message
+                setSuccessMessage('Member has been removed from the group');
+                // Clear success message after 5 seconds
+                setTimeout(() => {
+                    setSuccessMessage('');
+                }, 5000);
             }
         } catch (err) {
-            setError('Failed to remove member');
+            // Add pulse animation to error message for unsettled expenses
+            const errorMsg = err.response?.data?.message || 'Failed to remove member';
+            setError(errorMsg);
+
+            // Add pulse class to error display for visual emphasis
+            const errorElement = document.querySelector('.alert-danger');
+            if (errorElement && errorMsg.includes('unsettled expenses')) {
+                errorElement.classList.add('pulse');
+
+                // Remove the pulse class after the error disappears
+                setTimeout(() => {
+                    errorElement.classList.remove('pulse');
+                }, 7000);
+            }
+
+            // Clear error message after 7 seconds
+            setTimeout(() => {
+                setError('');
+            }, 7000);
+
             console.error('Error removing member:', err);
         }
     };
 
-    // Leave group handler for non-owners
+    // Helper function to check if a user has unsettled expenses
+    const hasUnsettledExpenses = (userId) => {
+        return expenses.some(expense => {
+            // Case 1: User is part of an expense and hasn't settled it
+            const userSplit = expense.splitAmong.find(split => split.user === userId);
+            if (userSplit && !userSplit.settled && expense.paidBy.user !== userId) {
+                return true;
+            }
+
+            // Case 2: User paid for an expense and others haven't settled with them
+            if (expense.paidBy.user === userId) {
+                return expense.splitAmong.some(split =>
+                    split.user !== userId && !split.settled
+                );
+            }
+
+            return false;
+        });
+    };    // Leave group handler for non-owners
     const handleLeaveGroup = async () => {
         if (!group || group.createdBy === user._id) return;
+
+        // Scroll to top of page
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+
         if (!window.confirm('Are you sure you want to leave this group?')) return;
         try {
             await axios.post(`/groups/${id}/leave`);
@@ -259,7 +329,26 @@ const GroupDetail = () => {
             // Redirect to dashboard
             window.location.href = '/dashboard';
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to leave group');
+            // Add pulse animation to error message for unsettled expenses
+            const errorMsg = err.response?.data?.message || 'Failed to leave group';
+            setError(errorMsg);
+
+            // Add pulse class to error display for visual emphasis
+            const errorElement = document.querySelector('.alert-danger');
+            if (errorElement && errorMsg.includes('unsettled expenses')) {
+                errorElement.classList.add('pulse');
+
+                // Remove the pulse class after the error disappears
+                setTimeout(() => {
+                    errorElement.classList.remove('pulse');
+                }, 7000);
+            }
+
+            // Clear error message after 7 seconds
+            setTimeout(() => {
+                setError('');
+            }, 7000);
+
             console.error('Error leaving group:', err);
         }
     };
@@ -327,14 +416,16 @@ const GroupDetail = () => {
     return (<section className="container">
         <Link to="/dashboard" className="btn btn-light">
             <i className="fas fa-arrow-left"></i> Back to Dashboard
-        </Link>
-
-        <div className="group-header">
+        </Link>        <div className="group-header">
             <h1>{group.name}</h1>
             <p>{group.description}</p>
         </div>
 
-        {error && <div className="alert alert-danger">{error}</div>}
+        {error && (
+            <div className={`alert alert-danger ${error.includes('unsettled expenses') ? 'pulse' : ''}`}>
+                <i className="fas fa-exclamation-triangle"></i> {error}
+            </div>
+        )}
         {successMessage && <div className="alert alert-success">{successMessage}</div>}            <div className="group-actions">
             <Link to={`/expenses/add/${id}`} className="btn btn-primary">
                 <i className="fas fa-plus-circle"></i> Add Expense

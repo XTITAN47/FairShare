@@ -2,6 +2,28 @@ const Group = require('../models/Group');
 const User = require('../models/User');
 const Expense = require('../models/Expense');
 
+// Helper function to check if a user has unsettled expenses in a group
+const hasUnsettledExpenses = async (userId, groupId) => {
+    const expenses = await Expense.find({ group: groupId });
+
+    return expenses.some(expense => {
+        // Case 1: User is part of an expense and hasn't settled it
+        const userSplit = expense.splitAmong.find(split => split.user.toString() === userId);
+        if (userSplit && !userSplit.settled && expense.paidBy.user.toString() !== userId) {
+            return true;
+        }
+
+        // Case 2: User paid for an expense and others haven't settled with them
+        if (expense.paidBy.user.toString() === userId) {
+            return expense.splitAmong.some(split =>
+                split.user.toString() !== userId && !split.settled
+            );
+        }
+
+        return false;
+    });
+};
+
 // Create a new group
 exports.createGroup = async (req, res) => {
     try {
@@ -265,6 +287,14 @@ exports.removeMember = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized to remove members' });
         }
 
+        // Check if user has unsettled expenses
+        const hasUnsetExpenses = await hasUnsettledExpenses(userId, req.params.id);
+        if (hasUnsetExpenses) {
+            return res.status(400).json({
+                message: 'This member has unsettled expenses. They must settle all expenses before being removed from the group.'
+            });
+        }
+
         // Remove user from group
         group.members = group.members.filter(member =>
             member.user.toString() !== userId
@@ -335,6 +365,14 @@ exports.leaveGroup = async (req, res) => {
         // Prevent group owner from leaving
         if (group.createdBy.toString() === req.user.id) {
             return res.status(403).json({ message: 'Group owner cannot leave the group. You can delete the group instead.' });
+        }
+
+        // Check if user has unsettled expenses
+        const hasUnsetExpenses = await hasUnsettledExpenses(req.user.id, req.params.id);
+        if (hasUnsetExpenses) {
+            return res.status(400).json({
+                message: 'You have unsettled expenses. You must settle all expenses before leaving the group.'
+            });
         }
 
         // Remove user from group members
