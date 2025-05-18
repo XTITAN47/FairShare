@@ -357,32 +357,33 @@ const GroupDetail = () => {
             <h2>Members</h2>
             <ul className="members-list">
                 {group.members.map(member => (
-                    <li key={member.user} className="member-item">
-                        <div className="member-info">
-                            <span className="member-name">{member.name}</span>
-                            <div className="member-contact">
-                                <span className="member-email">{member.email}</span>
-                                {member.phone && <span className="member-phone">{member.phone}</span>}
-                            </div>
-                            {member.user === group.createdBy && (
-                                <span className="owner-badge">Group Owner</span>
-                            )}
+                    <li key={member.user} className="member-item">                        <div className="member-info">
+                        <span className="member-name">{member.name}</span>
+                        <div className="member-contact">
+                            <span className="member-email">{member.email}</span>
+                            {member.phone && <span className="member-phone">{member.phone}</span>}
                         </div>
-                        {group.createdBy === user._id && member.user !== user._id && (
-                            <button
-                                className="btn btn-danger btn-sm"
-                                onClick={() => handleRemoveMember(member.user)}
-                            >
-                                <i className="fas fa-user-minus"></i> Remove
-                            </button>
+                        {member.user === group.createdBy && (
+                            <span className="owner-badge">Group Owner</span>
                         )}
-                        {/* QR Code button - show for all members */}
-                        <button
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => openQrModal(member)}
-                        >
-                            <i className="fas fa-qrcode"></i> QR Code
-                        </button>
+                    </div>
+                        <div className="btn-group">
+                            {group.createdBy === user._id && member.user !== user._id && (
+                                <button
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => handleRemoveMember(member.user)}
+                                >
+                                    <i className="fas fa-user-minus"></i> Remove
+                                </button>
+                            )}
+                            {/* QR Code button - show for all members */}
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => openQrModal(member)}
+                            >
+                                <i className="fas fa-qrcode"></i> QR Code
+                            </button>
+                        </div>
                     </li>
                 ))}
             </ul>

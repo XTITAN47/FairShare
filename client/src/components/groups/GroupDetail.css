@@ -5,11 +5,11 @@
   --light-teal: #1abc9c;
   --dark-teal: #0e6655;
   --teal-gradient: linear-gradient(135deg, #0e6655, #16a085);
-  
+
   --dark-green-1: rgba(22, 160, 133, 0.5);
   --dark-green-2: rgba(14, 102, 85, 0.7);
   --dark-green-3: rgba(10, 80, 70, 0.8);
-  
+
   --button-green: #1abc9c;
   --button-green-hover: #16a085;
   --highlight-yellow: #f1c40f;
@@ -17,11 +17,11 @@
   --danger-red-hover: #c0392b;
   --danger-orange: #e67e22;
   --danger-orange-hover: #d35400;
-  
+
   /* Money indication colors */
-  --money-owed: #e67e22;   /* Orange for money owed */
+  --money-owed: #e67e22; /* Orange for money owed */
   --money-receive: #2ecc71; /* Green for money to receive */
-  
+
   /* New dark blue colors for inner containers */
   --dark-blue-1: rgba(26, 37, 48, 0.85);
   --dark-blue-2: rgba(20, 30, 40, 0.9);
@@ -118,7 +118,8 @@ section.container {
 .member-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background-color: var(--dark-blue-2);
@@ -141,6 +142,10 @@ section.container {
   border: none;
   color: white;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  margin-left: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .member-item .btn:hover {
@@ -157,10 +162,23 @@ section.container {
   background-color: var(--danger-orange-hover);
 }
 
+.member-item .btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
 .member-info {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  flex: 1;
+  min-width: 50%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .member-name {
@@ -177,12 +195,17 @@ section.container {
   color: rgba(255, 255, 255, 0.9);
   margin-top: 0.25rem;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  width: 100%;
 }
 
 .member-email,
 .member-phone {
   display: flex;
   align-items: center;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .member-email:before {
