@@ -233,13 +233,30 @@ exports.uploadQRCode = async (req, res) => {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
-        // Get the path where the file was stored
-        const qrCodePath = `/uploads/qrcodes/${req.file.filename}`;
+        // Import cloudinary config
+        const { cloudinary } = require('../config/cloudinary');
 
-        // Update user's QR code field
+        // Create a data URI for the image
+        const fileStr = req.file.buffer.toString('base64');
+        const fileType = req.file.mimetype;
+        const dataURI = `data:${fileType};base64,${fileStr}`;
+
+        // Upload to Cloudinary with user ID in folder path for organization
+        const uploadResult = await cloudinary.uploader.upload(dataURI, {
+            folder: 'fairshare/qrcodes',
+            public_id: `user_${req.user.id}_${Date.now()}`,
+            overwrite: true
+        });
+
+        // Update user's QR code field with Cloudinary URL
         const updatedUser = await User.findByIdAndUpdate(
             req.user.id,
-            { $set: { paymentQRCode: qrCodePath } },
+            {
+                $set: {
+                    paymentQRCode: uploadResult.secure_url,
+                    cloudinaryPublicId: uploadResult.public_id
+                }
+            },
             { new: true }
         ).select('-password');
 
@@ -253,10 +270,20 @@ exports.uploadQRCode = async (req, res) => {
 // Delete payment QR code
 exports.deleteQRCode = async (req, res) => {
     try {
-        // Update user to remove QR code
+        // Get the current user to check for Cloudinary public ID
+        const user = await User.findById(req.user.id);
+
+        // If there's a Cloudinary public ID, delete the image from Cloudinary
+        if (user.cloudinaryPublicId) {
+            // Import cloudinary config
+            const { cloudinary } = require('../config/cloudinary');
+            await cloudinary.uploader.destroy(user.cloudinaryPublicId);
+        }
+
+        // Update user to remove QR code and Cloudinary ID
         const updatedUser = await User.findByIdAndUpdate(
             req.user.id,
-            { $set: { paymentQRCode: '' } },
+            { $set: { paymentQRCode: '', cloudinaryPublicId: '' } },
             { new: true }
         ).select('-password');
 

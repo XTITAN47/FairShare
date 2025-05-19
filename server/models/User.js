@@ -18,8 +18,11 @@ const UserSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true
+    }, paymentQRCode: {
+        type: String,
+        default: ''
     },
-    paymentQRCode: {
+    cloudinaryPublicId: {
         type: String,
         default: ''
     },

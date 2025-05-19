@@ -65,8 +65,7 @@ const QRCodeModal = ({ isOpen, onClose, title, qrCodeUrl, userName, selectedUser
                         </div>
                     ) : qrCodeUrl ? (
                         <div className="qr-modal-content">
-                            <p className="qr-modal-username">Scan {userName}'s payment QR code</p>
-                            <div className="qr-modal-image-container">                                <img
+                            <p className="qr-modal-username">Scan {userName}'s payment QR code</p>                            <div className="qr-modal-image-container">                                <img
                                 src={qrCodeUrl}
                                 alt={`${userName}'s Payment QR Code`}
                                 className="qr-modal-image"
