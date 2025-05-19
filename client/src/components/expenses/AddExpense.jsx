@@ -253,17 +253,15 @@ const AddExpense = () => {
         // Clear all modified members
         setModifiedMembers(new Set());
         setError(''); // Clear any previous errors
-    };
-
-    const onSubmit = async e => {
+    }; const onSubmit = async e => {
         e.preventDefault();
 
-        // Validate total split amount equals expense amount
-        const totalSplitAmount = splits.reduce((sum, split) => sum + split.amount, 0);
+        // Only validate percentage equals 100% (validation of amount will be done on the backend)
+        const totalPercentage = splits.reduce((sum, split) => sum + split.percentage, 0);
         const expenseAmount = parseFloat(amount);
 
-        if (Math.abs(totalSplitAmount - expenseAmount) > 0.01) {
-            setError(`Split amounts must equal the total expense amount (${expenseAmount})`);
+        if (Math.abs(totalPercentage - 100) > 1) {
+            setError(`Total percentage must equal 100%. Current: ${totalPercentage.toFixed(2)}%`);
             return;
         }
 
@@ -471,14 +469,9 @@ const AddExpense = () => {
                                     </div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-
-                    <div className="splits-summary">
-                        <p>
+                        ))}                    </div>                    <div className="splits-summary">                        <p>
                             Total Split Amount: Rs. {splits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
-                        </p>
-                        <p>
+                        </p>                        <p>
                             Total Percentage: {splits.reduce((sum, split) => sum + split.percentage, 0).toFixed(2)}%
                         </p>
                     </div>

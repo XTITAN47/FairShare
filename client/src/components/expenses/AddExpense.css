@@ -9,6 +9,11 @@
   --dark-green-1: rgba(22, 160, 133, 0.5);
   --dark-green-2: rgba(14, 102, 85, 0.7);
   --dark-green-3: rgba(10, 80, 70, 0.8);
+  
+  /* Status indicators for split validation */
+  --status-ok: var(--primary-teal);
+  --status-error: #e74c3c;
+}
 
   --button-green: #1abc9c;
   --button-green-hover: #16a085;
