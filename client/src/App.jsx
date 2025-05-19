@@ -21,18 +21,32 @@ import NotificationManager from './components/layout/NotificationManager';
 import AuthContext from './context/AuthContext';
 
 // Set default axios base URL
-axios.defaults.baseURL = 'http://localhost:5000/api';
+// Dynamic base URL for API calls that works both on localhost and on the network
+const getBaseUrl = () => {
+  // If we're in development, we need to use the IP address or localhost
+  return window.location.hostname === 'localhost'
+    ? 'http://localhost:5000/api'
+    : `http://${window.location.hostname}:5000/api`;
+};
+
+axios.defaults.baseURL = getBaseUrl();
 
 function App() {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
-
   // Setup socket connection
   useEffect(() => {
     // Create socket instance only once
-    const socketInstance = io('http://localhost:5000', {
+    // Dynamic socket URL that works both on localhost and on the network
+    const getSocketUrl = () => {
+      return window.location.hostname === 'localhost'
+        ? 'http://localhost:5000'
+        : `http://${window.location.hostname}:5000`;
+    };
+
+    const socketInstance = io(getSocketUrl(), {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

@@ -19,7 +19,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    // Allow requests from anywhere on the local network
+    origin: true,
+    credentials: true
+}));
 app.use(express.json());
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -32,8 +36,9 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/expense-sha
 // Socket.io setup
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
-        methods: ['GET', 'POST']
+        origin: true, // Allow connections from anywhere on the local network
+        methods: ['GET', 'POST'],
+        credentials: true
     },
     pingTimeout: 60000 // Increase ping timeout to prevent premature disconnects
 });
@@ -125,6 +130,8 @@ app.get('/', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+    // Display local IP addresses
+    require('./showLocalIp');
 });

@@ -11,6 +11,7 @@ A full-stack expense sharing application built with the MERN stack (MongoDB, Exp
 - Generate optimal settlement plans to minimize the number of transactions
 - Real-time updates using Socket.io
 - Expense analytics with charts and visualizations
+- Access on local network for sharing with friends
 
 ## Graph Algorithms Used
 
@@ -99,6 +100,20 @@ This project implements several graph algorithms for expense management:
 
 4. Open your browser and navigate to `http://localhost:5173`
 
+## Accessing on Local Network
+
+The application is configured to be accessible on your local network, allowing you to share it with friends connected to the same WiFi network:
+
+1. Start both the server and client applications as described above
+2. When the server starts, it will display your local IP addresses in the terminal
+3. Share these links with others on your network:
+   - Server URL: `http://<your-local-ip>:5000`
+   - Client URL: `http://<your-local-ip>:5173`
+4. Others can access the application by entering these URLs in their browsers
+5. All users on the same network can now interact with the application simultaneously
+
+> Note: Make sure your firewall or antivirus software is not blocking the ports (5000 for server, 5173 for client).
+
 ## Project Structure
 
 ```
@@ -135,5 +150,5 @@ expense-sharing-daa/
 ## License
 
 This project is licensed under the MIT License.
-"# FairShare" 
-"# FairShare" 
+"# FairShare"
+"# FairShare"
