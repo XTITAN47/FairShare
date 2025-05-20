@@ -97,13 +97,16 @@ const GroupDetail = () => {
                 axios.get(`/expenses/settlement/${id}`)
                     .then(res => setSettlements(res.data))
                     .catch(err => console.error('Error refreshing settlement plan:', err));
-            });
-
-            // Listen for expense deletions
+            });            // Listen for expense deletions
             socket.on('expense_deleted', (data) => {
                 setExpenses(prevExpenses =>
                     prevExpenses.filter(expense => expense._id !== data.expenseId)
                 );
+
+                // Also refresh settlement plan when an expense is deleted
+                axios.get(`/expenses/settlement/${id}`)
+                    .then(res => setSettlements(res.data))
+                    .catch(err => console.error('Error refreshing settlement plan after deletion:', err));
             });
 
             // Listen for member removals
@@ -619,38 +622,46 @@ const GroupDetail = () => {
                                                                         expense.splitAmong.some(split =>
                                                                             split.user === user._id && split.pendingSettlement
                                                                         )
-                                                                    );
-
-                                                                    // Cancel each pending settlement
+                                                                    );                                                                    // Cancel each pending settlement
                                                                     for (const expense of relevantExpenses) {
-                                                                        const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                            action: 'cancel'
-                                                                        });
-
-                                                                        // Update the expenses state
-                                                                        setExpenses(prevExpenses =>
-                                                                            prevExpenses.map(exp =>
-                                                                                exp._id === expense._id ? response.data : exp
-                                                                            )
-                                                                        );
-
-                                                                        // Emit socket event for real-time update
-                                                                        if (socket) {
-                                                                            socket.emit('settlement_update', {
-                                                                                groupId: id,
-                                                                                expenseId: expense._id,
-                                                                                expense: response.data
+                                                                        try {
+                                                                            const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                                action: 'cancel'
                                                                             });
+
+                                                                            // Update the expenses state
+                                                                            setExpenses(prevExpenses =>
+                                                                                prevExpenses.map(exp =>
+                                                                                    exp._id === expense._id ? response.data : exp
+                                                                                )
+                                                                            );
+
+                                                                            // Emit socket event for real-time update
+                                                                            if (socket) {
+                                                                                socket.emit('settlement_update', {
+                                                                                    groupId: id,
+                                                                                    expenseId: expense._id,
+                                                                                    expense: response.data
+                                                                                });
+                                                                            }
+                                                                        } catch (err) {
+                                                                            console.error(`Error canceling expense ${expense._id} settlement:`, err);
                                                                         }
                                                                     }
 
-                                                                    setSuccessMessage(`Canceled settlement request with ${settlement.to.name}`);
-                                                                    setTimeout(() => {
-                                                                        setSuccessMessage('');
-                                                                    }, 5000);
+                                                                    // Refresh the settlement plan to reflect the changes
+                                                                    try {
+                                                                        const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                                                                        setSettlements(settlementRes.data);
+                                                                    } catch (err) {
+                                                                        console.error('Error refreshing settlements after canceling:', err);
+                                                                    }
                                                                 } catch (err) {
                                                                     setError('Failed to cancel settlement request');
                                                                     console.error('Error canceling settlement:', err);
+                                                                    setTimeout(() => {
+                                                                        setError('');
+                                                                    }, 5000);
                                                                 }
                                                             }}
                                                         >
@@ -658,21 +669,44 @@ const GroupDetail = () => {
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <>
-                                                        <button
-                                                            className="btn btn-primary btn-sm"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    // Find all expenses where this user owes the recipient
-                                                                    const relevantExpenses = expenses.filter(expense =>
-                                                                        expense.paidBy.user === settlement.to.id &&
-                                                                        expense.splitAmong.some(split =>
-                                                                            split.user === user._id && !split.settled && !split.pendingSettlement
-                                                                        )
+                                                    <>                                                        <button
+                                                        className="btn btn-primary btn-sm"
+                                                        onClick={async () => {
+                                                            console.log("Mark for Settlement button clicked");
+                                                            try {
+                                                                // Get fresh expense data - critical to avoid sync issues
+                                                                const freshExpensesRes = await axios.get(`/expenses/group/${id}`);
+                                                                const freshExpenses = freshExpensesRes.data;
+
+                                                                // Find all expenses where this user owes the recipient
+                                                                const relevantExpenses = freshExpenses.filter(expense => {
+                                                                    // More detailed filtering to ensure we catch all relevant expenses
+                                                                    const isPaidByTarget = expense.paidBy.user === settlement.to.id;
+
+                                                                    // Check if the current user is in the splitAmong array and hasn't settled
+                                                                    const userSplit = expense.splitAmong.find(split =>
+                                                                        split.user === user._id
                                                                     );
 
-                                                                    // Mark each expense as pending settlement
-                                                                    for (const expense of relevantExpenses) {
+                                                                    return isPaidByTarget && userSplit && !userSplit.settled && !userSplit.pendingSettlement;
+                                                                });
+
+                                                                console.log(`Found ${relevantExpenses.length} relevant expenses for settlement with ${settlement.to.name}`);
+                                                                console.log(relevantExpenses);
+
+                                                                // If no relevant expenses, show error message
+                                                                if (relevantExpenses.length === 0) {
+                                                                    console.warn("No relevant expenses found that match the criteria for settlement");
+                                                                    setError("No expenses found that can be marked for settlement");
+                                                                    setTimeout(() => {
+                                                                        setError('');
+                                                                    }, 5000);
+                                                                    return;
+                                                                }
+
+                                                                // Mark each expense as pending settlement
+                                                                for (const expense of relevantExpenses) {
+                                                                    try {
                                                                         const response = await axios.put(`/expenses/settle/${expense._id}`, {
                                                                             action: 'request'
                                                                         });
@@ -692,20 +726,29 @@ const GroupDetail = () => {
                                                                                 expense: response.data
                                                                             });
                                                                         }
+                                                                    } catch (err) {
+                                                                        console.error(`Error marking expense ${expense._id} for settlement:`, err);
                                                                     }
-
-                                                                    setSuccessMessage(`Marked for settlement with ${settlement.to.name}`);
-                                                                    setTimeout(() => {
-                                                                        setSuccessMessage('');
-                                                                    }, 5000);
-                                                                } catch (err) {
-                                                                    setError('Failed to mark for settlement');
-                                                                    console.error('Error marking settlement:', err);
                                                                 }
-                                                            }}
-                                                        >
-                                                            <i className="fas fa-check-circle"></i> Mark for Settlement
-                                                        </button>
+
+                                                                // Refresh the settlement plan to reflect the changes
+                                                                try {
+                                                                    const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                                                                    setSettlements(settlementRes.data);
+                                                                } catch (err) {
+                                                                    console.error('Error refreshing settlements after marking for settlement:', err);
+                                                                }
+                                                            } catch (err) {
+                                                                setError('Failed to mark for settlement');
+                                                                console.error('Error marking settlement:', err);
+                                                                setTimeout(() => {
+                                                                    setError('');
+                                                                }, 5000);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <i className="fas fa-check-circle"></i> Mark for Settlement
+                                                    </button>
 
                                                         <button
                                                             className="btn btn-info btn-sm"
@@ -774,45 +817,53 @@ const GroupDetail = () => {
                                                                         expense.splitAmong.some(split =>
                                                                             split.user === settlement.from.id && split.pendingSettlement
                                                                         )
-                                                                    );
-
-                                                                    // Confirm each expense
+                                                                    );                                                                    // Confirm each expense
                                                                     for (const expense of relevantExpenses) {
-                                                                        const userToConfirm = expense.splitAmong.find(split =>
-                                                                            split.user === settlement.from.id && split.pendingSettlement
-                                                                        );
-
-                                                                        if (userToConfirm) {
-                                                                            const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                                action: 'confirm',
-                                                                                userId: userToConfirm.user
-                                                                            });
-
-                                                                            // Update expenses state
-                                                                            setExpenses(prevExpenses =>
-                                                                                prevExpenses.map(exp =>
-                                                                                    exp._id === expense._id ? response.data : exp
-                                                                                )
+                                                                        try {
+                                                                            const userToConfirm = expense.splitAmong.find(split =>
+                                                                                split.user === settlement.from.id && split.pendingSettlement
                                                                             );
 
-                                                                            // Emit socket event
-                                                                            if (socket) {
-                                                                                socket.emit('settlement_update', {
-                                                                                    groupId: id,
-                                                                                    expenseId: expense._id,
-                                                                                    expense: response.data
+                                                                            if (userToConfirm) {
+                                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                                    action: 'confirm',
+                                                                                    userId: userToConfirm.user
                                                                                 });
+
+                                                                                // Update expenses state
+                                                                                setExpenses(prevExpenses =>
+                                                                                    prevExpenses.map(exp =>
+                                                                                        exp._id === expense._id ? response.data : exp
+                                                                                    )
+                                                                                );
+
+                                                                                // Emit socket event
+                                                                                if (socket) {
+                                                                                    socket.emit('settlement_update', {
+                                                                                        groupId: id,
+                                                                                        expenseId: expense._id,
+                                                                                        expense: response.data
+                                                                                    });
+                                                                                }
                                                                             }
+                                                                        } catch (err) {
+                                                                            console.error(`Error confirming expense ${expense._id} settlement:`, err);
                                                                         }
                                                                     }
 
-                                                                    setSuccessMessage(`Confirmed payment from ${settlement.from.name}`);
-                                                                    setTimeout(() => {
-                                                                        setSuccessMessage('');
-                                                                    }, 5000);
+                                                                    // Refresh the settlement plan to reflect the changes
+                                                                    try {
+                                                                        const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                                                                        setSettlements(settlementRes.data);
+                                                                    } catch (err) {
+                                                                        console.error('Error refreshing settlements after confirmation:', err);
+                                                                    }
                                                                 } catch (err) {
                                                                     setError('Failed to confirm settlement');
                                                                     console.error('Error confirming settlement:', err);
+                                                                    setTimeout(() => {
+                                                                        setError('');
+                                                                    }, 5000);
                                                                 }
                                                             }}
                                                         >
@@ -828,45 +879,53 @@ const GroupDetail = () => {
                                                                         expense.splitAmong.some(split =>
                                                                             split.user === settlement.from.id && split.pendingSettlement
                                                                         )
-                                                                    );
-
-                                                                    // Reject each expense
+                                                                    );                                                                    // Reject each expense
                                                                     for (const expense of relevantExpenses) {
-                                                                        const userToReject = expense.splitAmong.find(split =>
-                                                                            split.user === settlement.from.id && split.pendingSettlement
-                                                                        );
-
-                                                                        if (userToReject) {
-                                                                            const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                                action: 'reject',
-                                                                                userId: userToReject.user
-                                                                            });
-
-                                                                            // Update expenses state
-                                                                            setExpenses(prevExpenses =>
-                                                                                prevExpenses.map(exp =>
-                                                                                    exp._id === expense._id ? response.data : exp
-                                                                                )
+                                                                        try {
+                                                                            const userToReject = expense.splitAmong.find(split =>
+                                                                                split.user === settlement.from.id && split.pendingSettlement
                                                                             );
 
-                                                                            // Emit socket event
-                                                                            if (socket) {
-                                                                                socket.emit('settlement_update', {
-                                                                                    groupId: id,
-                                                                                    expenseId: expense._id,
-                                                                                    expense: response.data
+                                                                            if (userToReject) {
+                                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                                    action: 'reject',
+                                                                                    userId: userToReject.user
                                                                                 });
+
+                                                                                // Update expenses state
+                                                                                setExpenses(prevExpenses =>
+                                                                                    prevExpenses.map(exp =>
+                                                                                        exp._id === expense._id ? response.data : exp
+                                                                                    )
+                                                                                );
+
+                                                                                // Emit socket event
+                                                                                if (socket) {
+                                                                                    socket.emit('settlement_update', {
+                                                                                        groupId: id,
+                                                                                        expenseId: expense._id,
+                                                                                        expense: response.data
+                                                                                    });
+                                                                                }
                                                                             }
+                                                                        } catch (err) {
+                                                                            console.error(`Error rejecting expense ${expense._id} settlement:`, err);
                                                                         }
                                                                     }
 
-                                                                    setError('Rejected settlement claims');
-                                                                    setTimeout(() => {
-                                                                        setError('');
-                                                                    }, 5000);
+                                                                    // Refresh the settlement plan to reflect the changes
+                                                                    try {
+                                                                        const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                                                                        setSettlements(settlementRes.data);
+                                                                    } catch (err) {
+                                                                        console.error('Error refreshing settlements after rejection:', err);
+                                                                    }
                                                                 } catch (err) {
                                                                     setError('Failed to reject settlement');
                                                                     console.error('Error rejecting settlement:', err);
+                                                                    setTimeout(() => {
+                                                                        setError('');
+                                                                    }, 5000);
                                                                 }
                                                             }}
                                                         >
@@ -905,18 +964,36 @@ const GroupDetail = () => {
                                                 onClick={async () => {
                                                     try {
                                                         if (window.confirm('Are you sure you want to delete this expense?')) {
-                                                            await axios.delete(`/expenses/${expense._id}`);
-                                                            // Update the expenses state immediately
-                                                            setExpenses(prevExpenses =>
-                                                                prevExpenses.filter(e => e._id !== expense._id)
-                                                            );
-                                                            // Emit socket event for real-time update
-                                                            if (socket) {
-                                                                console.log('Emitting expense_deleted event');
-                                                                socket.emit('expense_deleted', {
-                                                                    groupId: id,
-                                                                    expenseId: expense._id
-                                                                });
+                                                            try {
+                                                                await axios.delete(`/expenses/${expense._id}`);
+
+                                                                // Update the expenses state immediately
+                                                                setExpenses(prevExpenses =>
+                                                                    prevExpenses.filter(e => e._id !== expense._id)
+                                                                );
+
+                                                                // Refresh the settlement plan to reflect the changes immediately
+                                                                try {
+                                                                    const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                                                                    setSettlements(settlementRes.data);
+                                                                } catch (err) {
+                                                                    console.error('Error refreshing settlements after deletion:', err);
+                                                                }
+
+                                                                // Emit socket event for real-time update
+                                                                if (socket) {
+                                                                    console.log('Emitting expense_deleted event');
+                                                                    socket.emit('expense_deleted', {
+                                                                        groupId: id,
+                                                                        expenseId: expense._id
+                                                                    });
+                                                                }
+                                                            } catch (err) {
+                                                                setError('Failed to delete expense');
+                                                                console.error('Error deleting expense:', err);
+                                                                setTimeout(() => {
+                                                                    setError('');
+                                                                }, 5000);
                                                             }
                                                         }
                                                     } catch (err) {
