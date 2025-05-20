@@ -5,12 +5,14 @@ import AuthContext from '../../context/AuthContext';
 import QRCodeModal from '../layout/QRCodeModal';
 import './GroupDetail.css';
 import './GroupErrorStyles.css';
+import './SettlementPlanIntegration.css';
 
 const GroupDetail = () => {
     const { id } = useParams();
     const { user, socket } = useContext(AuthContext);
     const [group, setGroup] = useState(null);
     const [expenses, setExpenses] = useState([]);
+    const [settlements, setSettlements] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
@@ -26,11 +28,17 @@ const GroupDetail = () => {
             try {
                 // Get group details
                 const groupRes = await axios.get(`/groups/${id}`);
-                setGroup(groupRes.data);                // Get group expenses
+                setGroup(groupRes.data);
+
+                // Get group expenses
                 const expensesRes = await axios.get(`/expenses/group/${id}`);
                 // Sort expenses by date in descending order (newest first)
                 const sortedExpenses = expensesRes.data.sort((a, b) => new Date(b.date) - new Date(a.date));
                 setExpenses(sortedExpenses);
+
+                // Get settlement plan
+                const settlementRes = await axios.get(`/expenses/settlement/${id}`);
+                setSettlements(settlementRes.data);
 
                 setLoading(false);
             } catch (err) {
@@ -70,6 +78,11 @@ const GroupDetail = () => {
                     // Sort by date in descending order (newest first)
                     return updatedExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
                 });
+
+                // Also refresh settlement plan when an expense is added
+                axios.get(`/expenses/settlement/${id}`)
+                    .then(res => setSettlements(res.data))
+                    .catch(err => console.error('Error refreshing settlement plan:', err));
             });
 
             // Listen for settlement updates
@@ -79,6 +92,11 @@ const GroupDetail = () => {
                         expense._id === data.expenseId ? data.expense : expense
                     )
                 );
+
+                // Also refresh settlement plan
+                axios.get(`/expenses/settlement/${id}`)
+                    .then(res => setSettlements(res.data))
+                    .catch(err => console.error('Error refreshing settlement plan:', err));
             });
 
             // Listen for expense deletions
@@ -554,232 +572,383 @@ const GroupDetail = () => {
                     </button>
                 </div>
             </form>
-        </div>                <div className="expenses-section">
-                <h2>Expenses</h2>
-                {expenses.length === 0 ? (
-                    <div className="empty-state">
-                        <i className="fas fa-receipt empty-icon"></i>
-                        <p>No expenses yet. Add one to get started!</p>
-                        <Link to={`/expenses/add/${id}`} className="btn btn-primary">
-                            <i className="fas fa-plus-circle"></i> Add First Expense
-                        </Link>
-                    </div>
-                ) : (
-                    <div className="expenses-list">
-                        {expenses.map(expense => (
-                            <div key={expense._id} className="expense-item">                                    <div className="expense-header">
-                                <h3>{expense.description}</h3>
-                                <span className="expense-amount">Rs. {expense.amount.toFixed(2)}</span>
-                                {expense.paidBy.user === user._id && (
-                                    <button
-                                        className="btn btn-danger btn-sm"
-                                        onClick={async () => {
-                                            try {
-                                                if (window.confirm('Are you sure you want to delete this expense?')) {
-                                                    await axios.delete(`/expenses/${expense._id}`);
-                                                    // Update the expenses state immediately
-                                                    setExpenses(prevExpenses =>
-                                                        prevExpenses.filter(e => e._id !== expense._id)
-                                                    );
-                                                    // Emit socket event for real-time update
-                                                    if (socket) {
-                                                        console.log('Emitting expense_deleted event');
-                                                        socket.emit('expense_deleted', {
-                                                            groupId: id,
-                                                            expenseId: expense._id
-                                                        });
+        </div>                <div className="settlement-section">
+                <div className="payments-to-make">
+                    <h2><i className="fas fa-arrow-up"></i> Payments You Need to Make</h2>
+                    {settlements.filter(settlement => settlement.from.id === user._id).length === 0 ? (
+                        <div className="empty-state">
+                            <i className="fas fa-check-circle empty-icon"></i>
+                            <p>You don't have any pending payments to make.</p>
+                        </div>
+                    ) : (
+                        <div className="settlement-list user-payments">
+                            {settlements
+                                .filter(settlement => settlement.from.id === user._id)
+                                .map((settlement, index) => {
+                                    // Check if any expenses related to this settlement are pending settlement
+                                    const hasPendingSettlement = expenses.some(expense =>
+                                        expense.paidBy.user === settlement.to.id &&
+                                        expense.splitAmong.some(split =>
+                                            split.user === user._id && split.pendingSettlement
+                                        )
+                                    );
+
+                                    return (
+                                        <div key={index} className={`settlement-item ${hasPendingSettlement ? 'pending' : ''}`}>
+                                            <div className="settlement-header">
+                                                <h3>
+                                                    <span className="pay-to">Pay to: {settlement.to.name}</span>
+                                                </h3>
+                                                <span className="settlement-amount">Rs. {settlement.amount.toFixed(2)}</span>
+                                            </div>
+
+                                            <div className="settlement-actions">
+                                                {hasPendingSettlement ? (
+                                                    <div className="waiting-settlement">
+                                                        <span className="waiting-badge">
+                                                            <i className="fas fa-clock"></i> Waiting for Settlement
+                                                        </span>
+                                                        {/* Cancel button */}
+                                                        <button
+                                                            className="btn btn-outline-secondary btn-sm"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    // Find all expenses where this user owes the recipient and has pending settlements
+                                                                    const relevantExpenses = expenses.filter(expense =>
+                                                                        expense.paidBy.user === settlement.to.id &&
+                                                                        expense.splitAmong.some(split =>
+                                                                            split.user === user._id && split.pendingSettlement
+                                                                        )
+                                                                    );
+
+                                                                    // Cancel each pending settlement
+                                                                    for (const expense of relevantExpenses) {
+                                                                        const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                            action: 'cancel'
+                                                                        });
+
+                                                                        // Update the expenses state
+                                                                        setExpenses(prevExpenses =>
+                                                                            prevExpenses.map(exp =>
+                                                                                exp._id === expense._id ? response.data : exp
+                                                                            )
+                                                                        );
+
+                                                                        // Emit socket event for real-time update
+                                                                        if (socket) {
+                                                                            socket.emit('settlement_update', {
+                                                                                groupId: id,
+                                                                                expenseId: expense._id,
+                                                                                expense: response.data
+                                                                            });
+                                                                        }
+                                                                    }
+
+                                                                    setSuccessMessage(`Canceled settlement request with ${settlement.to.name}`);
+                                                                    setTimeout(() => {
+                                                                        setSuccessMessage('');
+                                                                    }, 5000);
+                                                                } catch (err) {
+                                                                    setError('Failed to cancel settlement request');
+                                                                    console.error('Error canceling settlement:', err);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-times"></i> Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    // Find all expenses where this user owes the recipient
+                                                                    const relevantExpenses = expenses.filter(expense =>
+                                                                        expense.paidBy.user === settlement.to.id &&
+                                                                        expense.splitAmong.some(split =>
+                                                                            split.user === user._id && !split.settled && !split.pendingSettlement
+                                                                        )
+                                                                    );
+
+                                                                    // Mark each expense as pending settlement
+                                                                    for (const expense of relevantExpenses) {
+                                                                        const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                            action: 'request'
+                                                                        });
+
+                                                                        // Update the expenses state
+                                                                        setExpenses(prevExpenses =>
+                                                                            prevExpenses.map(exp =>
+                                                                                exp._id === expense._id ? response.data : exp
+                                                                            )
+                                                                        );
+
+                                                                        // Emit socket event for real-time update
+                                                                        if (socket) {
+                                                                            socket.emit('settlement_update', {
+                                                                                groupId: id,
+                                                                                expenseId: expense._id,
+                                                                                expense: response.data
+                                                                            });
+                                                                        }
+                                                                    }
+
+                                                                    setSuccessMessage(`Marked for settlement with ${settlement.to.name}`);
+                                                                    setTimeout(() => {
+                                                                        setSuccessMessage('');
+                                                                    }, 5000);
+                                                                } catch (err) {
+                                                                    setError('Failed to mark for settlement');
+                                                                    console.error('Error marking settlement:', err);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-check-circle"></i> Mark for Settlement
+                                                        </button>
+
+                                                        <button
+                                                            className="btn btn-info btn-sm"
+                                                            onClick={() => {
+                                                                // Find recipient in group.members
+                                                                const recipient = group.members.find(member => member.user === settlement.to.id);
+                                                                if (recipient) {
+                                                                    openQrModal(recipient);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-qrcode"></i> Pay
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="payments-to-receive">
+                    <h2><i className="fas fa-arrow-down"></i> Payments You'll Receive</h2>
+                    {settlements.filter(settlement => settlement.to.id === user._id).length === 0 ? (
+                        <div className="empty-state">
+                            <i className="fas fa-check-circle empty-icon"></i>
+                            <p>You don't have any pending payments to receive.</p>
+                        </div>
+                    ) : (
+                        <div className="settlement-list user-receipts">
+                            {settlements
+                                .filter(settlement => settlement.to.id === user._id)
+                                .map((settlement, index) => {
+                                    // Check if there are any pending settlements related to this user
+                                    const hasPendingConfirmation = expenses.some(expense =>
+                                        expense.paidBy.user === user._id &&
+                                        expense.splitAmong.some(split =>
+                                            split.user === settlement.from.id && split.pendingSettlement
+                                        )
+                                    );
+
+                                    return (
+                                        <div key={index} className="settlement-item">
+                                            <div className="settlement-header">
+                                                <h3>
+                                                    <span className="receive-from">From: {settlement.from.name}</span>
+                                                </h3>
+                                                <span className="settlement-amount receive">Rs. {settlement.amount.toFixed(2)}</span>
+                                            </div>
+
+                                            {hasPendingConfirmation && (
+                                                <div className="settlement-confirm-actions">
+                                                    <span className="pending-badge">
+                                                        <i className="fas fa-bell"></i> Payment Pending Confirmation
+                                                    </span>
+                                                    <div className="confirmation-buttons">
+                                                        <button
+                                                            className="btn btn-success btn-sm"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    // Find all expenses where user is paid by and the other person has a pending settlement
+                                                                    const relevantExpenses = expenses.filter(expense =>
+                                                                        expense.paidBy.user === user._id &&
+                                                                        expense.splitAmong.some(split =>
+                                                                            split.user === settlement.from.id && split.pendingSettlement
+                                                                        )
+                                                                    );
+
+                                                                    // Confirm each expense
+                                                                    for (const expense of relevantExpenses) {
+                                                                        const userToConfirm = expense.splitAmong.find(split =>
+                                                                            split.user === settlement.from.id && split.pendingSettlement
+                                                                        );
+
+                                                                        if (userToConfirm) {
+                                                                            const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                                action: 'confirm',
+                                                                                userId: userToConfirm.user
+                                                                            });
+
+                                                                            // Update expenses state
+                                                                            setExpenses(prevExpenses =>
+                                                                                prevExpenses.map(exp =>
+                                                                                    exp._id === expense._id ? response.data : exp
+                                                                                )
+                                                                            );
+
+                                                                            // Emit socket event
+                                                                            if (socket) {
+                                                                                socket.emit('settlement_update', {
+                                                                                    groupId: id,
+                                                                                    expenseId: expense._id,
+                                                                                    expense: response.data
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    setSuccessMessage(`Confirmed payment from ${settlement.from.name}`);
+                                                                    setTimeout(() => {
+                                                                        setSuccessMessage('');
+                                                                    }, 5000);
+                                                                } catch (err) {
+                                                                    setError('Failed to confirm settlement');
+                                                                    console.error('Error confirming settlement:', err);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-check"></i> Confirm Receipt
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-danger btn-sm"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    // Find all expenses where user is paid by and the other person has a pending settlement
+                                                                    const relevantExpenses = expenses.filter(expense =>
+                                                                        expense.paidBy.user === user._id &&
+                                                                        expense.splitAmong.some(split =>
+                                                                            split.user === settlement.from.id && split.pendingSettlement
+                                                                        )
+                                                                    );
+
+                                                                    // Reject each expense
+                                                                    for (const expense of relevantExpenses) {
+                                                                        const userToReject = expense.splitAmong.find(split =>
+                                                                            split.user === settlement.from.id && split.pendingSettlement
+                                                                        );
+
+                                                                        if (userToReject) {
+                                                                            const response = await axios.put(`/expenses/settle/${expense._id}`, {
+                                                                                action: 'reject',
+                                                                                userId: userToReject.user
+                                                                            });
+
+                                                                            // Update expenses state
+                                                                            setExpenses(prevExpenses =>
+                                                                                prevExpenses.map(exp =>
+                                                                                    exp._id === expense._id ? response.data : exp
+                                                                                )
+                                                                            );
+
+                                                                            // Emit socket event
+                                                                            if (socket) {
+                                                                                socket.emit('settlement_update', {
+                                                                                    groupId: id,
+                                                                                    expenseId: expense._id,
+                                                                                    expense: response.data
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    setError('Rejected settlement claims');
+                                                                    setTimeout(() => {
+                                                                        setError('');
+                                                                    }, 5000);
+                                                                } catch (err) {
+                                                                    setError('Failed to reject settlement');
+                                                                    console.error('Error rejecting settlement:', err);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-times"></i> Reject
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="expense-history">
+                    <h2><i className="fas fa-history"></i> Expense History</h2>
+                    {expenses.length === 0 ? (
+                        <div className="empty-state">
+                            <i className="fas fa-receipt empty-icon"></i>
+                            <p>No expenses yet. Add one to get started!</p>
+                            <Link to={`/expenses/add/${id}`} className="btn btn-primary">
+                                <i className="fas fa-plus-circle"></i> Add First Expense
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="expenses-list history-list">
+                            {expenses.map(expense => (
+                                <div key={expense._id} className="expense-item history-item">
+                                    <div className="expense-header">
+                                        <h3>{expense.description}</h3>
+                                        <span className="expense-amount">Rs. {expense.amount.toFixed(2)}</span>
+                                        {expense.paidBy.user === user._id && (
+                                            <button
+                                                className="btn btn-danger btn-sm"
+                                                onClick={async () => {
+                                                    try {
+                                                        if (window.confirm('Are you sure you want to delete this expense?')) {
+                                                            await axios.delete(`/expenses/${expense._id}`);
+                                                            // Update the expenses state immediately
+                                                            setExpenses(prevExpenses =>
+                                                                prevExpenses.filter(e => e._id !== expense._id)
+                                                            );
+                                                            // Emit socket event for real-time update
+                                                            if (socket) {
+                                                                console.log('Emitting expense_deleted event');
+                                                                socket.emit('expense_deleted', {
+                                                                    groupId: id,
+                                                                    expenseId: expense._id
+                                                                });
+                                                            }
+                                                        }
+                                                    } catch (err) {
+                                                        setError('Failed to delete expense');
+                                                        console.error('Error deleting expense:', err);
                                                     }
-                                                }
-                                            } catch (err) {
-                                                setError('Failed to delete expense');
-                                                console.error('Error deleting expense:', err);
-                                            }
-                                        }}
-                                    >
-                                        <i className="fas fa-trash-alt"></i> Delete
-                                    </button>
-                                )}
-                            </div><div className="expense-details">
-                                    <p>Paid by: {expense.paidBy.name}</p>
-                                    <p>Date: {new Date(expense.date).toLocaleDateString()} {new Date(expense.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                    <p>Category: {expense.category}</p>
+                                                }}
+                                            >
+                                                <i className="fas fa-trash-alt"></i> Delete
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="expense-details">
+                                        <p>Paid by: {expense.paidBy.name}</p>
+                                        <p>Date: {new Date(expense.date).toLocaleDateString()} {new Date(expense.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p>Category: {expense.category}</p>
+                                    </div>
+                                    <div className="expense-splits">
+                                        <h4>Split Among:</h4>
+                                        <ul>
+                                            {expense.splitAmong.map(split => (
+                                                <li key={split.user} className="split-item">
+                                                    <span>{split.name}: Rs. {split.amount.toFixed(2)}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 </div>
-                                <div className="expense-splits">
-                                    <h4>Split Among:</h4>
-                                    <ul>                                            {expense.splitAmong.map(split => (
-                                        <li key={split.user} className={`split-item ${split.settled ? 'settled' : ''} ${split.pendingSettlement ? 'pending-settlement' : ''}`}>
-                                            <span>{split.name}: Rs. {split.amount.toFixed(2)}</span>
-
-                                            {/* User who needs to pay - can request settlement */}
-                                            {split.user === user._id && !split.settled && !split.pendingSettlement && expense.paidBy.user !== user._id && (
-                                                <div className="settlement-actions">
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        onClick={async () => {
-                                                            try {
-                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                    action: 'request'
-                                                                });
-
-                                                                // Update the expenses state immediately
-                                                                setExpenses(prevExpenses =>
-                                                                    prevExpenses.map(exp =>
-                                                                        exp._id === expense._id ? response.data : exp
-                                                                    )
-                                                                );
-
-                                                                // Emit socket event for real-time update
-                                                                if (socket) {
-                                                                    console.log('Emitting settlement_update event');
-                                                                    socket.emit('settlement_update', {
-                                                                        groupId: id,
-                                                                        expenseId: expense._id,
-                                                                        expense: response.data
-                                                                    });
-                                                                }
-                                                            } catch (err) {
-                                                                setError('Failed to request settlement');
-                                                                console.error('Error requesting settlement:', err);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <i className="fas fa-check-circle"></i> Mark as Settled
-                                                    </button>
-
-                                                    {/* Pay button to show QR code */}
-                                                    <button
-                                                        className="btn btn-info btn-sm"
-                                                        onClick={() => {
-                                                            // Find payer in group.members
-                                                            const payer = group.members.find(member => member.user === expense.paidBy.user);
-                                                            if (payer) {
-                                                                openQrModal(payer);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <i className="fas fa-qrcode"></i> Pay
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {/* User who has requested settlement can cancel their request */}
-                                            {split.user === user._id && split.pendingSettlement && !split.settled && expense.paidBy.user !== user._id && (
-                                                <div className="settlement-actions">
-                                                    <span className="pending-badge">Marked for Settlement</span>
-                                                    <button
-                                                        className="btn btn-outline-secondary btn-sm"
-                                                        onClick={async () => {
-                                                            try {
-                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                    action: 'cancel'
-                                                                });
-
-                                                                // Update the expenses state immediately
-                                                                setExpenses(prevExpenses =>
-                                                                    prevExpenses.map(exp =>
-                                                                        exp._id === expense._id ? response.data : exp
-                                                                    )
-                                                                );
-
-                                                                // Emit socket event for real-time update
-                                                                if (socket) {
-                                                                    console.log('Emitting settlement_update event');
-                                                                    socket.emit('settlement_update', {
-                                                                        groupId: id,
-                                                                        expenseId: expense._id,
-                                                                        expense: response.data
-                                                                    });
-                                                                }
-                                                            } catch (err) {
-                                                                setError('Failed to cancel settlement request');
-                                                                console.error('Error canceling settlement request:', err);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <i className="fas fa-times"></i> Cancel
-                                                    </button>
-                                                </div>
-                                            )}                                            {/* Person who paid - can confirm or reject settlement */}
-                                            {expense.paidBy.user === user._id && split.pendingSettlement && (
-                                                <div className="settlement-actions">
-                                                    <button
-                                                        className="btn btn-success btn-sm"
-                                                        onClick={async () => {
-                                                            try {
-                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                    action: 'confirm',
-                                                                    userId: split.user
-                                                                });
-
-                                                                // Update the expenses state immediately
-                                                                setExpenses(prevExpenses =>
-                                                                    prevExpenses.map(exp =>
-                                                                        exp._id === expense._id ? response.data : exp
-                                                                    )
-                                                                );
-
-                                                                // Emit socket event for real-time update
-                                                                if (socket) {
-                                                                    console.log('Emitting settlement_update event');
-                                                                    socket.emit('settlement_update', {
-                                                                        groupId: id,
-                                                                        expenseId: expense._id,
-                                                                        expense: response.data
-                                                                    });
-                                                                }
-                                                            } catch (err) {
-                                                                setError('Failed to confirm settlement');
-                                                                console.error('Error confirming settlement:', err);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <i className="fas fa-check"></i> Confirm Settled
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-danger btn-sm"
-                                                        onClick={async () => {
-                                                            try {
-                                                                const response = await axios.put(`/expenses/settle/${expense._id}`, {
-                                                                    action: 'reject',
-                                                                    userId: split.user
-                                                                });
-
-                                                                // Update the expenses state immediately
-                                                                setExpenses(prevExpenses =>
-                                                                    prevExpenses.map(exp =>
-                                                                        exp._id === expense._id ? response.data : exp
-                                                                    )
-                                                                );
-
-                                                                // Emit socket event for real-time update
-                                                                if (socket) {
-                                                                    console.log('Emitting settlement_update event');
-                                                                    socket.emit('settlement_update', {
-                                                                        groupId: id,
-                                                                        expenseId: expense._id,
-                                                                        expense: response.data
-                                                                    });
-                                                                }
-                                                            } catch (err) {
-                                                                setError('Failed to reject settlement');
-                                                                console.error('Error rejecting settlement:', err);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <i className="fas fa-times"></i> Reject
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {split.settled && <span className="settled-badge">Settled</span>}
-                                        </li>
-                                    ))}
-                                    </ul>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
 
