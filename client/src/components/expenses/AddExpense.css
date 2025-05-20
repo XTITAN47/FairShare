@@ -160,6 +160,18 @@ section.container {
   color: white;
 }
 
+/* Hide spinner buttons (arrows) from number inputs */
+.form-group input[type="number"]::-webkit-inner-spin-button,
+.form-group input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* For Firefox */
+.form-group input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Split type options styling */
 .split-type-options {
   display: flex;

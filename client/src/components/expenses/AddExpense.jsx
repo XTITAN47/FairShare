@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthContext from '../../context/AuthContext';
@@ -8,6 +8,8 @@ const AddExpense = () => {
     const { groupId } = useParams();
     const navigate = useNavigate();
     const { socket } = useContext(AuthContext);
+    // Reference to the top of the form section
+    const formRef = useRef(null);
 
     const [group, setGroup] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -18,6 +20,11 @@ const AddExpense = () => {
         category: 'Other',
         splitType: 'equal' // equal, percentage, custom
     });
+
+    // Add a calculation amount state to preserve the original amount input
+    const [calculationAmount, setCalculationAmount] = useState(0);
+    // Store the original amount as entered by the user
+    const [originalAmount, setOriginalAmount] = useState('');
 
     const [splits, setSplits] = useState([]);
     // Track which members have been manually modified
@@ -52,12 +59,34 @@ const AddExpense = () => {
         fetchGroup();
     }, [groupId]);
 
+    // Update calculation amount whenever amount changes
+    useEffect(() => {
+        if (amount) {
+            // Keep the original string value in originalAmount
+            setOriginalAmount(amount);
+            // Parse for calculations
+            setCalculationAmount(parseFloat(amount));
+        }
+    }, [amount]);
+
     const onChange = e => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
 
+        // Update calculation amount when amount changes
+        if (e.target.name === 'amount') {
+            // Store the exact value entered by the user
+            setOriginalAmount(e.target.value);
+            // Parse for calculations
+            const numAmount = parseFloat(e.target.value) || 0;
+            setCalculationAmount(numAmount);
+        }
+
         // Recalculate splits when amount or split type changes
         if (e.target.name === 'amount' || e.target.name === 'splitType') {
-            updateSplits(e.target.name === 'amount' ? e.target.value : amount, e.target.name === 'splitType' ? e.target.value : splitType);
+            updateSplits(
+                e.target.name === 'amount' ? e.target.value : amount,
+                e.target.name === 'splitType' ? e.target.value : splitType
+            );
         }
 
         // Reset modified members when switching to equal or percentage split
@@ -67,7 +96,9 @@ const AddExpense = () => {
     };
 
     const updateSplits = (newAmount, newSplitType) => {
+        // Use the new calculation amount
         const numAmount = parseFloat(newAmount) || 0;
+        setCalculationAmount(numAmount);
 
         if (newSplitType === 'equal') {
             // Equal split
@@ -95,9 +126,7 @@ const AddExpense = () => {
                     percentage: percentage,
                     amount: parseFloat(((numAmount * percentage) / 100).toFixed(2))
                 };
-            }));
-
-            // Reset modified members when switching to percentage split
+            }));            // Reset modified members when switching to percentage split
             setModifiedMembers(new Set());
         }
         // For custom, we don't auto-update
@@ -105,10 +134,15 @@ const AddExpense = () => {
 
     const handleSplitChange = (index, field, value) => {
         const newSplits = [...splits];
-        const numValue = parseFloat(value) || 0;
-        const totalAmount = parseFloat(amount) || 0;
 
-        newSplits[index][field] = numValue;
+        // Store the raw input value first
+        newSplits[index][field] = value;
+
+        // Use calculationAmount instead of amount
+        const totalAmount = calculationAmount;
+
+        // Only convert to number for calculations, keeping the empty string if empty
+        const numValue = value === '' ? 0 : parseFloat(value) || 0;
 
         // Update based on field changed
         if (field === 'amount') {
@@ -121,8 +155,8 @@ const AddExpense = () => {
             newSplits[index].amount = parseFloat(((totalAmount * numValue) / 100).toFixed(2));
         }
 
-        // Mark this member as manually modified
-        const newModifiedMembers = new Set(modifiedMembers);
+        // Mark this member as manually modified - create a new Set to ensure state update
+        const newModifiedMembers = new Set([...modifiedMembers]);
         newModifiedMembers.add(newSplits[index].userId);
         setModifiedMembers(newModifiedMembers);
 
@@ -131,29 +165,29 @@ const AddExpense = () => {
 
     // Function to distribute remaining amount equally among unmodified members
     const distributeRemaining = () => {
-        const totalAmount = parseFloat(amount) || 0;
+        // Use calculationAmount instead of parsing amount
+        const totalAmount = calculationAmount;
         if (totalAmount <= 0) {
             setError('Please enter a valid expense amount first');
+            // Scroll to top when error is shown
+            window.scrollTo(0, 0);
             return;
         }
 
-        if (splitType === 'custom') {
-            // Calculate currently allocated amount
+        if (splitType === 'custom') {            // Calculate currently allocated amount
             const allocatedAmount = splits.reduce((sum, split) => {
                 if (modifiedMembers.has(split.userId)) {
-                    return sum + split.amount;
+                    return sum + (parseFloat(split.amount) || 0);
                 }
                 return sum;
-            }, 0);
-
-            // Calculate remaining amount
+            }, 0);            // Calculate remaining amount
             const remainingAmount = totalAmount - allocatedAmount;
 
             // Count unmodified members
             const unmodifiedCount = splits.length - modifiedMembers.size;
-
             if (unmodifiedCount <= 0) {
                 setError('All members have been manually assigned amounts. Please reset one member to auto-distribute.');
+                window.scrollTo(0, 0);
                 return;
             }
 
@@ -162,6 +196,7 @@ const AddExpense = () => {
 
             if (amountPerMember < 0) {
                 setError('The total of manually assigned amounts exceeds the expense total. Please adjust the values.');
+                window.scrollTo(0, 0);
                 return;
             }
 
@@ -184,19 +219,17 @@ const AddExpense = () => {
             // Calculate currently allocated percentage
             const allocatedPercentage = splits.reduce((sum, split) => {
                 if (modifiedMembers.has(split.userId)) {
-                    return sum + split.percentage;
+                    return sum + (parseFloat(split.percentage) || 0);
                 }
                 return sum;
-            }, 0);
-
-            // Calculate remaining percentage
+            }, 0);            // Calculate remaining percentage
             const remainingPercentage = 100 - allocatedPercentage;
 
             // Count unmodified members
             const unmodifiedCount = splits.length - modifiedMembers.size;
-
             if (unmodifiedCount <= 0) {
                 setError('All members have been manually assigned percentages. Please reset one member to auto-distribute.');
+                window.scrollTo(0, 0);
                 return;
             }
 
@@ -205,6 +238,7 @@ const AddExpense = () => {
 
             if (percentagePerMember < 0) {
                 setError('The total of manually assigned percentages exceeds 100%. Please adjust the values.');
+                window.scrollTo(0, 0);
                 return;
             }
 
@@ -228,7 +262,8 @@ const AddExpense = () => {
 
     const resetCustomSplits = () => {
         // Reset all splits to equal
-        const numAmount = parseFloat(amount) || 0;
+        // Use calculationAmount instead of parsing amount
+        const numAmount = calculationAmount;
         const memberCount = splits.length;
         const equalAmount = memberCount > 0 ? numAmount / memberCount : 0;
         const equalPercentage = memberCount > 0 ? 100 / memberCount : 0;
@@ -248,27 +283,35 @@ const AddExpense = () => {
                     amount: parseFloat(((numAmount * percentage) / 100).toFixed(2))
                 };
             }));
-        }
-
-        // Clear all modified members
+        }        // Clear all modified members
         setModifiedMembers(new Set());
-        setError(''); // Clear any previous errors
+        setError(''); // Clear any previous errors    
     }; const onSubmit = async e => {
         e.preventDefault();
 
+        // Validate amount field manually before browser validation
+        if (!originalAmount || originalAmount.trim() === '' || parseFloat(originalAmount) <= 0) {
+            setError('Please enter a valid expense amount');
+            window.scrollTo(0, 0);
+            return;
+        }
+
         // Only validate percentage equals 100% (validation of amount will be done on the backend)
-        const totalPercentage = splits.reduce((sum, split) => sum + split.percentage, 0);
-        const expenseAmount = parseFloat(amount);
+        const totalPercentage = splits.reduce((sum, split) => sum + (parseFloat(split.percentage) || 0), 0);
+
+        // Use the original amount for submission
+        const expenseAmount = parseFloat(originalAmount);
 
         if (Math.abs(totalPercentage - 100) > 1) {
             setError(`Total percentage must equal 100%. Current: ${totalPercentage.toFixed(2)}%`);
+            window.scrollTo(0, 0);
             return;
         }
 
         try {
             const res = await axios.post('/expenses', {
                 description,
-                amount: expenseAmount,
+                amount: expenseAmount, // Send original amount to server
                 groupId,
                 splitAmong: splits.map(split => ({
                     userId: split.userId,
@@ -278,9 +321,7 @@ const AddExpense = () => {
                     settled: false
                 })),
                 category
-            });
-
-            // Emit socket event for real-time update
+            });            // Emit socket event for real-time update
             if (socket) {
                 console.log('Emitting expense_added event');
                 socket.emit('expense_added', {
@@ -289,12 +330,15 @@ const AddExpense = () => {
                 });
             }
 
+            // Scroll to top before navigating
+            window.scrollTo(0, 0);
+
             // Redirect back to group page
             navigate(`/groups/${groupId}`);
-
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to add expense');
             console.error('Error adding expense:', err.response?.data || err);
+            window.scrollTo(0, 0);
         }
     };
 
@@ -322,10 +366,8 @@ const AddExpense = () => {
                 </button>
             </div>
         );
-    }
-
-    return (
-        <section className="container">
+    } return (
+        <section className="container" ref={formRef}>
             <button onClick={() => navigate(`/groups/${groupId}`)} className="btn btn-light">
                 <i className="fas fa-arrow-left"></i> Back to Group
             </button>
@@ -348,19 +390,22 @@ const AddExpense = () => {
                         onChange={onChange}
                         required
                     />
-                </div>
-
-                <div className="form-group">
+                </div>                <div className="form-group">
                     <label htmlFor="amount">Amount (Rs.)</label>
                     <input
                         type="number"
                         id="amount"
                         name="amount"
-                        value={amount}
+                        value={originalAmount}
                         onChange={onChange}
                         step="0.01"
                         min="0.01"
                         required
+                        onInvalid={(e) => {
+                            e.preventDefault();
+                            setError('Please enter a valid expense amount');
+                            window.scrollTo(0, 0);
+                        }}
                     />
                 </div>
 
@@ -439,8 +484,7 @@ const AddExpense = () => {
                                 Reset to Equal
                             </button>
                         </div>
-                    )}
-                    <div className="splits-list">
+                    )}                    <div className="splits-list">
                         {splits.map((split, index) => (
                             <div key={split.userId} className="split-item">
                                 <span className="split-name">{split.name}</span>
@@ -450,18 +494,29 @@ const AddExpense = () => {
                                         <input type="number"
                                             value={split.amount}
                                             onChange={(e) => handleSplitChange(index, 'amount', e.target.value)}
+                                            onBlur={(e) => {
+                                                if (e.target.value === '') {
+                                                    const newSplits = [...splits];
+                                                    newSplits[index].amount = 0;
+                                                    setSplits(newSplits);
+                                                }
+                                            }}
                                             step="0.01"
                                             min="0"
                                             disabled={splitType !== 'custom'}
                                         />
-                                    </div>
-                                    <div className="split-input">
-                                        <label>Percentage (%)</label>
-                                        <input
+                                    </div>                                    <div className="split-input">
+                                        <label>Percentage (%)</label>                                        <input
                                             type="number"
-                                            value={split.percentage}
+                                            value={split.percentage === 0 && splitType === 'percentage' ? '' : split.percentage}
                                             onChange={(e) => handleSplitChange(index, 'percentage', e.target.value)}
-                                            step="0.01"
+                                            onBlur={(e) => {
+                                                if (e.target.value === '') {
+                                                    const newSplits = [...splits];
+                                                    newSplits[index].percentage = 0;
+                                                    setSplits(newSplits);
+                                                }
+                                            }} step="0.01"
                                             min="0"
                                             max="100"
                                             disabled={splitType !== 'percentage'}
@@ -469,10 +524,10 @@ const AddExpense = () => {
                                     </div>
                                 </div>
                             </div>
-                        ))}                    </div>                    <div className="splits-summary">                        <p>
-                            Total Split Amount: Rs. {splits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
+                        ))}</div>                    <div className="splits-summary">                        <p>
+                            Total Split Amount: Rs. {splits.reduce((sum, split) => sum + (parseFloat(split.amount) || 0), 0).toFixed(2)}
                         </p>                        <p>
-                            Total Percentage: {splits.reduce((sum, split) => sum + split.percentage, 0).toFixed(2)}%
+                            Total Percentage: {splits.reduce((sum, split) => sum + (parseFloat(split.percentage) || 0), 0).toFixed(2)}%
                         </p>
                     </div>
                 </div>
